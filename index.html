@@ -75,6 +75,7 @@
     <div class="row"><span class="dot" style="color:var(--c-unauth);background:var(--c-unauth)"></span> Unauthenticated</div>
     <div class="row"><span class="dot" style="color:var(--c-fail);background:var(--c-fail)"></span> FAIL / broken</div>
     <div class="row"><span class="dot" style="color:var(--c-hub);background:var(--c-hub)"></span> Core hub</div>
+    <div class="row"><span class="dot" style="color:var(--c-layer);background:var(--c-layer)"></span> Hermes (orchestration)</div>
   </div>
   <div class="legend section">
     <div class="row"><span class="dot" style="color:var(--c-hook);background:var(--c-hook)"></span> Lifecycle loop (5 hooks)</div>
@@ -108,12 +109,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 const C = {
-  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5'
+  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac'
 };
 
 // nodes: id, label, group, status, pos, size, desc, meta
 const nodes = [
   {id:'ws', label:'Workspace', status:'root', size:7, desc:'Shared workspace at /Users/kevintu/Documents/Codex. Open in VS Code, Obsidian, Codex app. Two AI harnesses share it.', meta:'Root · /Users/kevintu/Documents/Codex'},
+
+  // Hermes — messaging / orchestration layer
+  {id:'hermes', label:'Hermes', status:'layer', size:6, desc:'Messaging / orchestration layer. Inter-agent message bus + task router. Dispatches work between Claude Code, Codex, and subagents; drives the reasoning + delegation loops. Sits between workspace and harnesses.', meta:'Layer · orchestration bus'},
 
   // harnesses
   {id:'cc', label:'Claude Code', status:'hub', size:6, desc:'CLI harness, engine Opus 4.7. Coding core + hook wiring + skills. Config: ~/.claude/CLAUDE.md. Routing: UI / frontend / design.', meta:'Harness · Opus 4.7'},
@@ -164,6 +168,8 @@ const nodes = [
 ];
 
 const links = [
+  ['ws','hermes'],
+  ['hermes','cc'],['hermes','codexapp'],['hermes','mcp_codex'],['hermes','r_goal'],
   ['ws','cc'],['ws','codexapp'],
   ['cc','codexapp'],
   ['cc','mcp_codex'],['mcp_codex','codexapp'],
@@ -229,6 +235,7 @@ function place(){
     plugins:[55,40,30], p_caveman:[70,55,40], p_unauth:[75,30,15],
     skills:[60,-35,55], s_caveman:[80,-45,70], s_review:[85,-25,45], s_graphify:[70,-55,55], s_packs:[90,-40,60],
     ws:[0,0,0],
+    hermes:[0,28,-15],
     r_goal:[-30,25,-50], r_plan:[-5,40,-65], r_exec:[20,25,-60], r_review:[-5,5,-72],
     g_ingest:[95,-20,30], g_extract:[115,-30,50], g_out:[105,-10,65], g_query:[90,-5,45],
   };
