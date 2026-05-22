@@ -76,6 +76,7 @@
     <div class="row"><span class="dot" style="color:var(--c-fail);background:var(--c-fail)"></span> FAIL / broken</div>
     <div class="row"><span class="dot" style="color:var(--c-hub);background:var(--c-hub)"></span> Core hub</div>
     <div class="row"><span class="dot" style="color:var(--c-layer);background:var(--c-layer)"></span> Hermes (orchestration)</div>
+    <div class="row"><span class="dot" style="color:var(--c-tool);background:var(--c-tool)"></span> Obsidian (editor + vault)</div>
   </div>
   <div class="legend section">
     <div class="row"><span class="dot" style="color:var(--c-hook);background:var(--c-hook)"></span> Lifecycle loop (5 hooks)</div>
@@ -115,7 +116,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const C = {
-  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac', task:'#b4befe'
+  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac', task:'#b4befe', tool:'#d3a8e0'
 };
 
 // nodes: id, label, group, status, pos, size, desc, meta
@@ -124,6 +125,10 @@ const nodes = [
 
   // Hermes — messaging / orchestration layer
   {id:'hermes', label:'Hermes', status:'layer', size:6, desc:'Messaging / orchestration layer. Inter-agent message bus + task router. Dispatches work between Claude Code, Codex, and subagents; drives the reasoning + delegation loops. Sits between workspace and harnesses.', meta:'Layer · orchestration bus'},
+
+  // Obsidian — note editor + vault DB sharing the workspace
+  {id:'obsidian', label:'Obsidian', status:'tool', size:5, desc:'Note editor over the shared workspace /Users/kevintu/Documents/Codex. Edits Markdown notes; durable context in memory.md, codex.md. Alongside VS Code + Codex app.', meta:'Tool · editor'},
+  {id:'obs_vault', label:'Vault DB', status:'tool', size:3.6, desc:'Obsidian vault database — local index of notes, links, tags, backlinks. Markdown files on disk; .obsidian/ config + cache. Powers graph view + search.', meta:'Store · vault index'},
 
   // harnesses
   {id:'cc', label:'Claude Code', status:'hub', size:6, desc:'CLI harness, engine Opus 4.7. Coding core + hook wiring + skills. Config: ~/.claude/CLAUDE.md. Routing: UI / frontend / design.', meta:'Harness · Opus 4.7'},
@@ -181,6 +186,7 @@ const nodes = [
 
 const links = [
   ['ws','hermes'],
+  ['ws','obsidian'],['obsidian','obs_vault'],
   ['hermes','cc'],['hermes','codexapp'],['hermes','mcp_codex'],['hermes','r_goal'],['hermes','t_queue'],
   ['ws','cc'],['ws','codexapp'],
   ['cc','codexapp'],
@@ -255,6 +261,7 @@ function place(){
     skills:[60,-35,55], s_caveman:[80,-45,70], s_review:[85,-25,45], s_graphify:[70,-55,55], s_packs:[90,-40,60],
     ws:[0,0,0],
     hermes:[0,28,-15],
+    obsidian:[0,-40,20], obs_vault:[5,-62,30],
     r_goal:[-30,25,-50], r_plan:[-5,40,-65], r_exec:[20,25,-60], r_review:[-5,5,-72],
     g_ingest:[95,-20,30], g_extract:[115,-30,50], g_out:[105,-10,65], g_query:[90,-5,45],
     t_queue:[35,55,-30], t_spawn:[60,70,-25], t_run:[75,60,-45], t_result:[50,48,-55],
@@ -365,7 +372,7 @@ function pick(e){
   const hit = raycaster.intersectObjects(meshes,false);
   if(hit.length){
     const n = hit[0].object.userData;
-    const labelMap = {root:'ROOT',hub:'CORE HUB',ok:'OK',hook:'HOOK-BASED',unauth:'UNAUTH',fail:'FAIL',layer:'LAYER',role:'REASONING',graph:'GRAPHIFY',task:'TASK'};
+    const labelMap = {root:'ROOT',hub:'CORE HUB',ok:'OK',hook:'HOOK-BASED',unauth:'UNAUTH',fail:'FAIL',layer:'LAYER',role:'REASONING',graph:'GRAPHIFY',task:'TASK',tool:'TOOL'};
     const colMap = C;
     document.getElementById('iname').textContent = n.label;
     const tag = document.getElementById('itag');
