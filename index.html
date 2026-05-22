@@ -216,7 +216,7 @@ document.body.appendChild(labelRenderer.domElement);
 // bloom post-processing — makes emissive nodes + comets glow
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.85, 0.55, 0.18);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.45, 0.5, 0.35);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
