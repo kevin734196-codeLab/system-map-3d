@@ -83,6 +83,7 @@
     <div class="row"><span class="dot" style="color:var(--c-ok);background:var(--c-ok)"></span> Automatic loop (memory)</div>
     <div class="row"><span class="dot" style="color:var(--c-role);background:var(--c-role)"></span> Goal/Plan loop (reasoning)</div>
     <div class="row"><span class="dot" style="color:var(--c-graph);background:var(--c-graph)"></span> Graphify loop (knowledge graph)</div>
+    <div class="row"><span class="dot" style="color:var(--c-task);background:var(--c-task)"></span> Task path (async/background)</div>
   </div>
   <div class="hint">Drag = orbit · scroll = zoom · click node = details</div>
 </div>
@@ -94,6 +95,7 @@
   <button class="btn" id="b-auto" aria-pressed="true"><span class="swatch" style="color:var(--c-ok);background:var(--c-ok)"></span>Automatic</button>
   <button class="btn" id="b-reason" aria-pressed="true"><span class="swatch" style="color:#74c7ec;background:#74c7ec"></span>Goal/Plan</button>
   <button class="btn" id="b-graph" aria-pressed="true"><span class="swatch" style="color:#94e2d5;background:#94e2d5"></span>Graphify</button>
+  <button class="btn" id="b-task" aria-pressed="true"><span class="swatch" style="color:#b4befe;background:#b4befe"></span>Task</button>
   <button class="btn" id="b-reset">⊙ Reset view</button>
 </div>
 
@@ -109,7 +111,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 const C = {
-  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac'
+  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac', task:'#b4befe'
 };
 
 // nodes: id, label, group, status, pos, size, desc, meta
@@ -165,11 +167,17 @@ const nodes = [
   {id:'g_extract', label:'Extract edges', status:'graph', size:3, desc:'Edge honesty: EXTRACTED = in source · INFERRED = reasonable · AMBIGUOUS = uncertain. Never invent an edge.', meta:'graphify · extract'},
   {id:'g_out', label:'graphify-out', status:'graph', size:3.2, desc:'Outputs: graph.html, GRAPH_REPORT.md, graph.json. Navigation aid, not substitute for source verification.', meta:'graphify · output'},
   {id:'g_query', label:'Query', status:'graph', size:3, desc:'/graphify query "question" — prefer before broad reads when graphify-out exists. Loops back to ingest as corpus grows.', meta:'graphify · query'},
+
+  // Task path: background/async execution lane off Hermes (separate from reasoning loops)
+  {id:'t_queue', label:'Task Queue', status:'task', size:3.2, desc:'TaskCreate / scheduled-tasks / cron. Async work enqueued by Hermes — independent of the synchronous reasoning loop.', meta:'Task · enqueue'},
+  {id:'t_spawn', label:'Spawn Agent', status:'task', size:3.2, desc:'Agent / cavecrew subagent spawned (investigator, builder, reviewer). Isolated worktree optional. Cold context, self-contained prompt.', meta:'Task · spawn'},
+  {id:'t_run', label:'Run (bg)', status:'task', size:3.2, desc:'Background execution. Monitor / TaskOutput stream; run_in_background tasks notify on completion — no polling.', meta:'Task · run'},
+  {id:'t_result', label:'Result', status:'task', size:3.2, desc:'TaskGet result merged back. Trust-but-verify: check actual changes, not just the agent summary. Returns to Hermes.', meta:'Task · merge'},
 ];
 
 const links = [
   ['ws','hermes'],
-  ['hermes','cc'],['hermes','codexapp'],['hermes','mcp_codex'],['hermes','r_goal'],
+  ['hermes','cc'],['hermes','codexapp'],['hermes','mcp_codex'],['hermes','r_goal'],['hermes','t_queue'],
   ['ws','cc'],['ws','codexapp'],
   ['cc','codexapp'],
   ['cc','mcp_codex'],['mcp_codex','codexapp'],
@@ -238,6 +246,7 @@ function place(){
     hermes:[0,28,-15],
     r_goal:[-30,25,-50], r_plan:[-5,40,-65], r_exec:[20,25,-60], r_review:[-5,5,-72],
     g_ingest:[95,-20,30], g_extract:[115,-30,50], g_out:[105,-10,65], g_query:[90,-5,45],
+    t_queue:[35,55,-30], t_spawn:[60,70,-25], t_run:[75,60,-45], t_result:[50,48,-55],
   };
   nodes.forEach(n=>{
     const c = centers[n.id] || [(Math.random()-.5)*120,(Math.random()-.5)*80,(Math.random()-.5)*120];
@@ -332,6 +341,9 @@ const reasonPulses = reason.pulses;
 // graphify loop: Ingest -> Extract -> graphify-out -> Query -> back
 const graph = makeLoop(['g_ingest','g_extract','g_out','g_query'], 0x94e2d5, 4, 0.55);
 const graphPulses = graph.pulses;
+// Task path: Queue -> Spawn -> Run -> Result -> back
+const task = makeLoop(['t_queue','t_spawn','t_run','t_result'], 0xb4befe, 4, 0.55);
+const taskPulses = task.pulses;
 
 // traveling light pulses along every path
 const PULSE_PER_EDGE = 1;
@@ -389,6 +401,7 @@ document.getElementById('b-agentic').onclick = e=>toggle(e.currentTarget, agenti
 document.getElementById('b-auto').onclick = e=>toggle(e.currentTarget, auto.group);
 document.getElementById('b-reason').onclick = e=>toggle(e.currentTarget, reason.group);
 document.getElementById('b-graph').onclick = e=>toggle(e.currentTarget, graph.group);
+document.getElementById('b-task').onclick = e=>toggle(e.currentTarget, task.group);
 const bRot = document.getElementById('b-rotate');
 bRot.onclick = ()=>{
   controls.autoRotate = !controls.autoRotate;
@@ -420,7 +433,7 @@ function loop(){
     loopCurve.getPointAt(lp.p, lp.mesh.position);
     lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
   });
-  [...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses].forEach(lp=>{
+  [...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses, ...taskPulses].forEach(lp=>{
     lp.p += 0.003; if(lp.p>1) lp.p-=1;
     lp.curve.getPointAt(lp.p, lp.mesh.position);
     lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
