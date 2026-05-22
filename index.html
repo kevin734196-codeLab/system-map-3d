@@ -78,9 +78,6 @@
     <div class="row"><span class="dot" style="color:var(--c-layer);background:var(--c-layer)"></span> Hermes (orchestration)</div>
   </div>
   <div class="legend section">
-    <div class="row"><span class="dot" style="color:var(--c-hook);background:var(--c-hook)"></span> Lifecycle loop (5 hooks)</div>
-    <div class="row"><span class="dot" style="color:var(--c-root);background:var(--c-root)"></span> Agentic loop (delegation)</div>
-    <div class="row"><span class="dot" style="color:var(--c-ok);background:var(--c-ok)"></span> Automatic loop (memory)</div>
     <div class="row"><span class="dot" style="color:var(--c-role);background:var(--c-role)"></span> Goal/Plan loop (reasoning)</div>
     <div class="row"><span class="dot" style="color:var(--c-graph);background:var(--c-graph)"></span> Graphify loop (knowledge graph)</div>
     <div class="row"><span class="dot" style="color:var(--c-task);background:var(--c-task)"></span> Task path (async/background)</div>
@@ -90,9 +87,6 @@
 <div id="info" class="panel"><span class="close" onclick="document.getElementById('info').style.display='none'">×</span><h2 id="iname"></h2><span class="tag" id="itag"></span><p id="idesc"></p><div class="meta" id="imeta"></div></div>
 <div id="ctrl" class="panel">
   <button class="btn" id="b-rotate" aria-pressed="true">⏸ Rotate</button>
-  <button class="btn" id="b-life" aria-pressed="true"><span class="swatch" style="color:var(--c-hook);background:var(--c-hook)"></span>Lifecycle</button>
-  <button class="btn" id="b-agentic" aria-pressed="true"><span class="swatch" style="color:var(--c-root);background:var(--c-root)"></span>Agentic</button>
-  <button class="btn" id="b-auto" aria-pressed="true"><span class="swatch" style="color:var(--c-ok);background:var(--c-ok)"></span>Automatic</button>
   <button class="btn" id="b-reason" aria-pressed="true"><span class="swatch" style="color:#74c7ec;background:#74c7ec"></span>Goal/Plan</button>
   <button class="btn" id="b-graph" aria-pressed="true"><span class="swatch" style="color:#94e2d5;background:#94e2d5"></span>Graphify</button>
   <button class="btn" id="b-task" aria-pressed="true"><span class="swatch" style="color:#b4befe;background:#b4befe"></span>Task</button>
@@ -323,24 +317,6 @@ links.forEach(([a,b])=>{
   edges.push({a:na.pos, b:nb.pos, col, len:na.pos.distanceTo(nb.pos)});
 });
 
-// system lifecycle loop: hooks cycle SessionStart -> UserPromptSubmit -> PostToolUse -> Stop -> SessionEnd -> back
-const loopOrder = ['h_start','h_prompt','h_post','h_stop','h_end'];
-const loopPts = loopOrder.map(id=>nodeMap[id].pos);
-const loopCurve = new THREE.CatmullRomCurve3(loopPts, true, 'catmullrom', 0.4);
-const loopGeo = new THREE.TubeGeometry(loopCurve, 120, 0.5, 8, true);
-const loopMat = new THREE.MeshBasicMaterial({color:0xf9e2af, transparent:true, opacity:0.35});
-const lifecycleGroup = new THREE.Group();
-lifecycleGroup.add(new THREE.Mesh(loopGeo, loopMat));
-scene.add(lifecycleGroup);
-// bright comets racing the loop
-const loopPulses = [];
-for(let k=0;k<5;k++){
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1.3,12,12), new THREE.MeshBasicMaterial({color:0xfde68a}));
-  const glow = new THREE.Mesh(new THREE.SphereGeometry(3,12,12), new THREE.MeshBasicMaterial({color:0xf9e2af, transparent:true, opacity:0.3}));
-  m.add(glow); lifecycleGroup.add(m);
-  loopPulses.push({mesh:m, p:k/5});
-}
-
 // named macro-loops: closed circuits with their own racing comets
 function makeLoop(ids, color, comets, tube){
   const group = new THREE.Group();
@@ -359,12 +335,6 @@ function makeLoop(ids, color, comets, tube){
   scene.add(group);
   return {pulses:arr, group};
 }
-// agentic loop: delegation cycle Claude Code -> codex MCP -> Codex app -> back
-const agentic = makeLoop(['cc','mcp_codex','codexapp'], 0xcba6f7, 4, 0.55);
-const agenticPulses = agentic.pulses;
-// automatic loop: memory persistence Claude Code -> cavemem -> db -> hooks -> back
-const auto = makeLoop(['cc','mcp_cavemem','db','hooks'], 0xa6e3a1, 4, 0.55);
-const autoPulses = auto.pulses;
 // /goal/plan reasoning loop: Goal -> Plan -> Execute -> Review -> back
 const reason = makeLoop(['r_goal','r_plan','r_exec','r_review'], 0x74c7ec, 4, 0.55);
 const reasonPulses = reason.pulses;
@@ -427,9 +397,6 @@ function toggle(btn, group){
   btn.setAttribute('aria-pressed', on);
   group.visible = on;
 }
-document.getElementById('b-life').onclick = e=>toggle(e.currentTarget, lifecycleGroup);
-document.getElementById('b-agentic').onclick = e=>toggle(e.currentTarget, agentic.group);
-document.getElementById('b-auto').onclick = e=>toggle(e.currentTarget, auto.group);
 document.getElementById('b-reason').onclick = e=>toggle(e.currentTarget, reason.group);
 document.getElementById('b-graph').onclick = e=>toggle(e.currentTarget, graph.group);
 document.getElementById('b-task').onclick = e=>toggle(e.currentTarget, task.group);
@@ -459,12 +426,7 @@ function loop(){
     pu.mesh.material.opacity = 0.35 + 0.6*fade;
     pu.mesh.scale.setScalar(0.6 + 0.7*fade);
   });
-  loopPulses.forEach(lp=>{
-    lp.p += 0.0022; if(lp.p>1) lp.p-=1;
-    loopCurve.getPointAt(lp.p, lp.mesh.position);
-    lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
-  });
-  [...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses, ...taskPulses].forEach(lp=>{
+  [...reasonPulses, ...graphPulses, ...taskPulses].forEach(lp=>{
     lp.p += 0.003; if(lp.p>1) lp.p-=1;
     lp.curve.getPointAt(lp.p, lp.mesh.position);
     lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
