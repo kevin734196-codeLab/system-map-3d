@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Map 3D — Claude Code / Codex</title>
+<style>
+  /* ===== DESIGN SYSTEM — tokens ===== */
+  :root {
+    /* palette (Catppuccin-derived) */
+    --c-ok:#a6e3a1; --c-hook:#f9e2af; --c-unauth:#fab387; --c-fail:#f38ba8;
+    --c-hub:#89b4fa; --c-root:#cba6f7; --c-accent:#f5c2e7;
+    /* surfaces */
+    --bg:#05060a; --panel:rgba(10,12,20,0.74); --panel-solid:rgba(10,12,20,0.88);
+    --border:#1e2740; --border-strong:#313a5e; --divider:#232a44;
+    /* text */
+    --tx:#cdd6f4; --tx-dim:#b4bccc; --tx-mute:#6c7393; --tx-faint:#565c7a;
+    /* type scale */
+    --fs-xs:10px; --fs-sm:11px; --fs-md:11.5px; --fs-lg:13px; --fs-xl:15px;
+    --ff:-apple-system,BlinkMacSystemFont,"Segoe UI",monospace;
+    /* spacing scale (4px base) */
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px;
+    /* radius + elevation + motion */
+    --r-sm:8px; --r-md:10px; --r-pill:20px;
+    --blur:blur(9px); --shadow:0 8px 30px rgba(0,0,0,0.45);
+    --ease:cubic-bezier(.4,0,.2,1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:var(--ff); }
+  #c { display:block; width:100%; height:100%; }
+
+  /* ===== components ===== */
+  .panel {
+    position:fixed; z-index:10; color:var(--tx);
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); backdrop-filter:var(--blur); box-shadow:var(--shadow);
+  }
+  #hud { top:var(--s4); left:var(--s4); max-width:290px; }
+  #hud h1 { font-size:var(--fs-xl); letter-spacing:.5px; color:var(--c-hub); margin-bottom:2px; }
+  #hud .sub { font-size:var(--fs-sm); color:var(--tx-mute); margin-bottom:var(--s3); }
+  .legend { display:flex; flex-direction:column; gap:5px; font-size:var(--fs-md); }
+  .legend .row { display:flex; align-items:center; gap:var(--s2); }
+  .legend.section { margin-top:9px; border-top:1px solid var(--divider); padding-top:9px; }
+  .dot { width:11px; height:11px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 8px currentColor; }
+  .hint { margin-top:var(--s3); font-size:var(--fs-xs); color:var(--tx-faint); line-height:1.5; }
+
+  #info { top:var(--s4); right:var(--s4); width:320px; background:var(--panel-solid); border-color:var(--border-strong); padding:var(--s4); display:none; }
+  #info h2 { font-size:var(--fs-xl); color:var(--c-accent); margin-bottom:var(--s1); }
+  #info .tag { display:inline-block; font-size:var(--fs-xs); padding:2px var(--s2); border-radius:var(--r-pill); margin-bottom:var(--s3); font-weight:600; }
+  #info p { font-size:12.5px; line-height:1.55; color:var(--tx-dim); }
+  #info .meta { margin-top:var(--s3); font-size:var(--fs-sm); color:var(--tx-mute); border-top:1px solid var(--divider); padding-top:var(--s2); }
+  #info .close { position:absolute; top:var(--s2); right:var(--s3); cursor:pointer; color:var(--tx-mute); font-size:18px; line-height:1; transition:color .15s var(--ease); }
+  #info .close:hover { color:var(--c-fail); }
+
+  /* control bar */
+  #ctrl { bottom:var(--s4); left:50%; transform:translateX(-50%); display:flex; gap:var(--s2); padding:var(--s2) var(--s3); }
+  .btn {
+    font-family:var(--ff); font-size:var(--fs-sm); color:var(--tx-dim); cursor:pointer;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:6px var(--s3); transition:all .15s var(--ease); white-space:nowrap;
+  }
+  .btn:hover { color:var(--tx); border-color:var(--border-strong); background:rgba(255,255,255,0.08); }
+  .btn[aria-pressed="false"] { opacity:.4; }
+  .btn .swatch { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; box-shadow:0 0 6px currentColor; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="panel">
+  <h1>SYSTEM MAP · 3D</h1>
+  <div class="sub">Claude Code / Codex · verified 2026-05-22</div>
+  <div class="legend">
+    <div class="row"><span class="dot" style="color:var(--c-ok);background:var(--c-ok)"></span> OK / connected</div>
+    <div class="row"><span class="dot" style="color:var(--c-hook);background:var(--c-hook)"></span> Hook-based / caveat</div>
+    <div class="row"><span class="dot" style="color:var(--c-unauth);background:var(--c-unauth)"></span> Unauthenticated</div>
+    <div class="row"><span class="dot" style="color:var(--c-fail);background:var(--c-fail)"></span> FAIL / broken</div>
+    <div class="row"><span class="dot" style="color:var(--c-hub);background:var(--c-hub)"></span> Core hub</div>
+  </div>
+  <div class="legend section">
+    <div class="row"><span class="dot" style="color:var(--c-hook);background:var(--c-hook)"></span> Lifecycle loop (5 hooks)</div>
+    <div class="row"><span class="dot" style="color:var(--c-root);background:var(--c-root)"></span> Agentic loop (delegation)</div>
+    <div class="row"><span class="dot" style="color:var(--c-ok);background:var(--c-ok)"></span> Automatic loop (memory)</div>
+    <div class="row"><span class="dot" style="color:var(--c-role);background:var(--c-role)"></span> Goal/Plan loop (reasoning)</div>
+    <div class="row"><span class="dot" style="color:var(--c-graph);background:var(--c-graph)"></span> Graphify loop (knowledge graph)</div>
+  </div>
+  <div class="hint">Drag = orbit · scroll = zoom · click node = details</div>
+</div>
+<div id="info" class="panel"><span class="close" onclick="document.getElementById('info').style.display='none'">×</span><h2 id="iname"></h2><span class="tag" id="itag"></span><p id="idesc"></p><div class="meta" id="imeta"></div></div>
+<div id="ctrl" class="panel">
+  <button class="btn" id="b-rotate" aria-pressed="true">⏸ Rotate</button>
+  <button class="btn" id="b-life" aria-pressed="true"><span class="swatch" style="color:var(--c-hook);background:var(--c-hook)"></span>Lifecycle</button>
+  <button class="btn" id="b-agentic" aria-pressed="true"><span class="swatch" style="color:var(--c-root);background:var(--c-root)"></span>Agentic</button>
+  <button class="btn" id="b-auto" aria-pressed="true"><span class="swatch" style="color:var(--c-ok);background:var(--c-ok)"></span>Automatic</button>
+  <button class="btn" id="b-reason" aria-pressed="true"><span class="swatch" style="color:#74c7ec;background:#74c7ec"></span>Goal/Plan</button>
+  <button class="btn" id="b-graph" aria-pressed="true"><span class="swatch" style="color:#94e2d5;background:#94e2d5"></span>Graphify</button>
+  <button class="btn" id="b-reset">⊙ Reset view</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const C = {
+  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5'
+};
+
+// nodes: id, label, group, status, pos, size, desc, meta
+const nodes = [
+  {id:'ws', label:'Workspace', status:'root', size:7, desc:'Shared workspace at /Users/kevintu/Documents/Codex. Open in VS Code, Obsidian, Codex app. Two AI harnesses share it.', meta:'Root · /Users/kevintu/Documents/Codex'},
+
+  // harnesses
+  {id:'cc', label:'Claude Code', status:'hub', size:6, desc:'CLI harness, engine Opus 4.7. Coding core + hook wiring + skills. Config: ~/.claude/CLAUDE.md. Routing: UI / frontend / design.', meta:'Harness · Opus 4.7'},
+  {id:'codexapp', label:'Codex app', status:'hub', size:6, desc:'GPT-5.5 engine. Broad workflow workbench, delegated coding. Config: Codex/codex.md. Routing: backend / heavy reasoning.', meta:'Harness · GPT-5.5'},
+
+  // MCP servers
+  {id:'mcp_codex', label:'codex MCP', status:'ok', size:4, desc:'stdio (Codex.app). Connected. Broken in prior sessions, now live with Codex.app running.', meta:'MCP · stdio'},
+  {id:'mcp_cavemem', label:'cavemem', status:'hook', size:4.5, desc:'stdio (node@22). Active via 5 lifecycle hooks, not health-listed. Persistent cross-agent memory.', meta:'MCP · hook-based'},
+  {id:'mcp_gmail', label:'Gmail', status:'ok', size:3, desc:'claude.ai remote https web connector. Connected.', meta:'MCP · remote'},
+  {id:'mcp_spotify', label:'Spotify', status:'ok', size:3, desc:'claude.ai remote https web connector. Connected.', meta:'MCP · remote'},
+  {id:'mcp_canva', label:'Canva', status:'ok', size:3, desc:'claude.ai remote https web connector. Connected.', meta:'MCP · remote'},
+  {id:'mcp_shrink', label:'caveman-shrink', status:'fail', size:3, desc:'npx -y caveman-shrink fails to connect. Unused. Action: remove from config or fix package.', meta:'MCP · FAIL'},
+
+  // cavemem detail
+  {id:'db', label:'data.db', status:'ok', size:3.5, desc:'better-sqlite3 store at ~/.cavemem/data.db (1.1MB + 4MB WAL). PRAGMA quick_check OK, writable, WAL growing. Code-sign caveat only under non-homebrew node.', meta:'Store · SQLite WAL'},
+
+  // hooks
+  {id:'hooks', label:'Hook Wiring', status:'hook', size:4, desc:'settings.json. 5 lifecycle events. Status line caveman-statusline.sh. Permission mode auto. Theme dark-ansi. Caveman mode active (full).', meta:'Config · 5 events'},
+  {id:'h_start', label:'SessionStart', status:'hook', size:2.2, desc:'cavemem session-start; caveman-activate.js; codebase-activation-reminder.js', meta:'Hook event'},
+  {id:'h_prompt', label:'UserPromptSubmit', status:'hook', size:2.2, desc:'cavemem user-prompt-submit; caveman-mode-tracker.js', meta:'Hook event'},
+  {id:'h_post', label:'PostToolUse', status:'hook', size:2.2, desc:'cavemem post-tool-use', meta:'Hook event'},
+  {id:'h_stop', label:'Stop', status:'hook', size:2.2, desc:'cavemem stop', meta:'Hook event'},
+  {id:'h_end', label:'SessionEnd', status:'hook', size:2.2, desc:'cavemem session-end', meta:'Hook event'},
+
+  // plugins
+  {id:'plugins', label:'Plugins', status:'hub', size:4.5, desc:'1 installed & enabled (caveman). 23 available but unauthenticated. Marketplaces: caveman (JuliusBrussee/caveman), claude-plugins-official.', meta:'Subsystem'},
+  {id:'p_caveman', label:'caveman ✓', status:'ok', size:3, desc:'caveman@caveman (655b7d9c) — installed & enabled. The only authenticated plugin.', meta:'Plugin · enabled'},
+  {id:'p_unauth', label:'23 unauth', status:'unauth', size:3.5, desc:'Available but NOT authenticated: Linear, Notion, Slack, Monday, ClickUp, MS365, Atlassian, Intercom, Pendo, Fireflies, Figma, Amplitude, Amplitude-EU, Datadog, DocuSign, Canva, Klaviyo, Supermetrics, Ahrefs, Hex, Close, Outreach, Apollo.', meta:'Plugins · OAuth pending'},
+
+  // skills
+  {id:'skills', label:'Skills', status:'hub', size:4.5, desc:'Local ~/.claude/skills. caveman family + PR/review + graphify + bundled packs.', meta:'Subsystem'},
+  {id:'s_caveman', label:'caveman family', status:'ok', size:3, desc:'caveman, caveman-commit, caveman-compress, caveman-help, caveman-review, caveman-stats, cavecrew.', meta:'Skills'},
+  {id:'s_review', label:'PR/review', status:'ok', size:2.6, desc:'check-pr, greptile, greploop, review-loop.', meta:'Skills'},
+  {id:'s_graphify', label:'graphify', status:'ok', size:2.4, desc:'Knowledge graph from any folder of files.', meta:'Skill'},
+  {id:'s_packs', label:'bundled packs', status:'ok', size:3, desc:'docx/pptx/xlsx/pdf, engineering, data, finance, sales, legal, design, marketing, product-management.', meta:'Skill packs'},
+
+  // /goal/plan reasoning loop (CLAUDE.md execution roles: Planner -> Worker -> Reviewer)
+  {id:'r_goal', label:'Goal', status:'role', size:3.4, desc:'Planner role. Confirm goal, constraints, success criteria before starting. Priority: User goal → Safety → Verifiable result → Speed.', meta:'Reasoning · Planner'},
+  {id:'r_plan', label:'Plan mode', status:'role', size:3.4, desc:'Plan mode. Read files/config/nearby impls first; graphify query if graphify-out exists. Produce step plan, clarify ambiguity before guessing.', meta:'Reasoning · Plan'},
+  {id:'r_exec', label:'Execute', status:'role', size:3.4, desc:'Worker role. Minimum viable change, prefer Edit tool, preserve uncommitted changes. Inspect, change, run, verify.', meta:'Reasoning · Worker'},
+  {id:'r_review', label:'Review', status:'role', size:3.4, desc:'Reviewer role. Challenge work: bugs, omissions, edge cases, test gaps. Run closest check proportional to risk. Loops back to Goal.', meta:'Reasoning · Reviewer'},
+
+  // graphify loop: knowledge-graph build/query cycle
+  {id:'g_ingest', label:'Ingest', status:'graph', size:3, desc:'/graphify . — ingest any folder of files (code, docs, papers, images, videos). Run when orienting to a new/unfamiliar codebase.', meta:'graphify · ingest'},
+  {id:'g_extract', label:'Extract edges', status:'graph', size:3, desc:'Edge honesty: EXTRACTED = in source · INFERRED = reasonable · AMBIGUOUS = uncertain. Never invent an edge.', meta:'graphify · extract'},
+  {id:'g_out', label:'graphify-out', status:'graph', size:3.2, desc:'Outputs: graph.html, GRAPH_REPORT.md, graph.json. Navigation aid, not substitute for source verification.', meta:'graphify · output'},
+  {id:'g_query', label:'Query', status:'graph', size:3, desc:'/graphify query "question" — prefer before broad reads when graphify-out exists. Loops back to ingest as corpus grows.', meta:'graphify · query'},
+];
+
+const links = [
+  ['ws','cc'],['ws','codexapp'],
+  ['cc','codexapp'],
+  ['cc','mcp_codex'],['mcp_codex','codexapp'],
+  ['cc','mcp_cavemem'],['cc','mcp_gmail'],['cc','mcp_spotify'],['cc','mcp_canva'],['cc','mcp_shrink'],
+  ['mcp_cavemem','db'],['mcp_cavemem','hooks'],
+  ['cc','hooks'],
+  ['hooks','h_start'],['hooks','h_prompt'],['hooks','h_post'],['hooks','h_stop'],['hooks','h_end'],
+  ['h_start','mcp_cavemem'],['h_prompt','mcp_cavemem'],['h_post','mcp_cavemem'],['h_stop','mcp_cavemem'],['h_end','mcp_cavemem'],
+  ['cc','plugins'],['plugins','p_caveman'],['plugins','p_unauth'],
+  ['cc','skills'],['skills','s_caveman'],['skills','s_review'],['skills','s_graphify'],['skills','s_packs'],
+  ['cc','r_goal'],
+  ['s_graphify','g_ingest'],
+];
+
+// ---- scene ----
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05060a, 0.0035);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
+camera.position.set(0, 30, 160);
+
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c'), antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.style.position='fixed';
+labelRenderer.domElement.style.top='0';
+labelRenderer.domElement.style.pointerEvents='none';
+document.body.appendChild(labelRenderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.07;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+
+scene.add(new THREE.AmbientLight(0xffffff,0.55));
+const pl = new THREE.PointLight(0xffffff,1.1); pl.position.set(60,80,100); scene.add(pl);
+const pl2 = new THREE.PointLight(0x89b4fa,0.7); pl2.position.set(-80,-40,-60); scene.add(pl2);
+
+// starfield
+const sg = new THREE.BufferGeometry();
+const sv = [];
+for(let i=0;i<1400;i++){ sv.push((Math.random()-.5)*1200,(Math.random()-.5)*1200,(Math.random()-.5)*1200); }
+sg.setAttribute('position', new THREE.Float32BufferAttribute(sv,3));
+scene.add(new THREE.Points(sg, new THREE.PointsMaterial({color:0x2a3050,size:1.1})));
+
+// position via deterministic spherical scatter seeded by index
+const nodeMap = {};
+nodes.forEach((n,i)=>{ nodeMap[n.id]=n; });
+
+// seed root center, then layout by group rings
+function place(){
+  const groups = {
+    root:[[0,0,0]],
+  };
+  // manual cluster centers
+  const centers = {
+    cc:[-40,10,0], codexapp:[45,-5,-20],
+    mcp_codex:[5,0,-35],
+    mcp_cavemem:[-70,-15,30], db:[-95,-25,40], hooks:[-60,35,25],
+    h_start:[-50,55,40], h_prompt:[-75,55,15], h_post:[-90,40,35], h_stop:[-78,48,55], h_end:[-58,45,5],
+    mcp_gmail:[-30,-45,-30], mcp_spotify:[-15,-55,-15], mcp_canva:[-45,-50,-20], mcp_shrink:[-10,-35,-50],
+    plugins:[55,40,30], p_caveman:[70,55,40], p_unauth:[75,30,15],
+    skills:[60,-35,55], s_caveman:[80,-45,70], s_review:[85,-25,45], s_graphify:[70,-55,55], s_packs:[90,-40,60],
+    ws:[0,0,0],
+    r_goal:[-30,25,-50], r_plan:[-5,40,-65], r_exec:[20,25,-60], r_review:[-5,5,-72],
+    g_ingest:[95,-20,30], g_extract:[115,-30,50], g_out:[105,-10,65], g_query:[90,-5,45],
+  };
+  nodes.forEach(n=>{
+    const c = centers[n.id] || [(Math.random()-.5)*120,(Math.random()-.5)*80,(Math.random()-.5)*120];
+    n.pos = new THREE.Vector3(c[0],c[1],c[2]);
+  });
+}
+place();
+
+const meshes = [];
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+nodes.forEach(n=>{
+  const col = C[n.status] || '#ffffff';
+  const geo = new THREE.SphereGeometry(n.size,32,32);
+  const mat = new THREE.MeshStandardMaterial({color:col, emissive:col, emissiveIntensity:0.45, roughness:0.35, metalness:0.3});
+  const m = new THREE.Mesh(geo,mat);
+  m.position.copy(n.pos);
+  m.userData = n;
+  scene.add(m);
+  // glow halo
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(n.size*1.4,16,16), new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:0.10}));
+  m.add(halo);
+  meshes.push(m);
+
+  const div = document.createElement('div');
+  div.textContent = n.label;
+  div.style.cssText = `color:${col};font-size:${n.status==='root'||n.status==='hub'?13:11}px;font-family:monospace;text-shadow:0 0 6px #000,0 0 3px #000;white-space:nowrap;`;
+  const lbl = new CSS2DObject(div);
+  lbl.position.set(0, n.size+3, 0);
+  m.add(lbl);
+});
+
+// links
+const linkMat = new THREE.LineBasicMaterial({color:0x3a4470, transparent:true, opacity:0.4});
+const edges = [];
+links.forEach(([a,b])=>{
+  const na=nodeMap[a], nb=nodeMap[b];
+  if(!na||!nb) return;
+  const g = new THREE.BufferGeometry().setFromPoints([na.pos, nb.pos]);
+  scene.add(new THREE.Line(g, linkMat));
+  // pulse color inherits destination node status
+  const col = new THREE.Color(C[nb.status] || '#89b4fa');
+  edges.push({a:na.pos, b:nb.pos, col, len:na.pos.distanceTo(nb.pos)});
+});
+
+// system lifecycle loop: hooks cycle SessionStart -> UserPromptSubmit -> PostToolUse -> Stop -> SessionEnd -> back
+const loopOrder = ['h_start','h_prompt','h_post','h_stop','h_end'];
+const loopPts = loopOrder.map(id=>nodeMap[id].pos);
+const loopCurve = new THREE.CatmullRomCurve3(loopPts, true, 'catmullrom', 0.4);
+const loopGeo = new THREE.TubeGeometry(loopCurve, 120, 0.5, 8, true);
+const loopMat = new THREE.MeshBasicMaterial({color:0xf9e2af, transparent:true, opacity:0.35});
+const lifecycleGroup = new THREE.Group();
+lifecycleGroup.add(new THREE.Mesh(loopGeo, loopMat));
+scene.add(lifecycleGroup);
+// bright comets racing the loop
+const loopPulses = [];
+for(let k=0;k<5;k++){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1.3,12,12), new THREE.MeshBasicMaterial({color:0xfde68a}));
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(3,12,12), new THREE.MeshBasicMaterial({color:0xf9e2af, transparent:true, opacity:0.3}));
+  m.add(glow); lifecycleGroup.add(m);
+  loopPulses.push({mesh:m, p:k/5});
+}
+
+// named macro-loops: closed circuits with their own racing comets
+function makeLoop(ids, color, comets, tube){
+  const group = new THREE.Group();
+  const pts = ids.map(id=>nodeMap[id].pos);
+  const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.4);
+  const geo = new THREE.TubeGeometry(curve, 140, tube, 8, true);
+  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.3});
+  group.add(new THREE.Mesh(geo, mat));
+  const arr = [];
+  for(let k=0;k<comets;k++){
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1.4,12,12), new THREE.MeshBasicMaterial({color}));
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(3.2,12,12), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.3}));
+    m.add(glow); group.add(m);
+    arr.push({mesh:m, p:k/comets, curve});
+  }
+  scene.add(group);
+  return {pulses:arr, group};
+}
+// agentic loop: delegation cycle Claude Code -> codex MCP -> Codex app -> back
+const agentic = makeLoop(['cc','mcp_codex','codexapp'], 0xcba6f7, 4, 0.55);
+const agenticPulses = agentic.pulses;
+// automatic loop: memory persistence Claude Code -> cavemem -> db -> hooks -> back
+const auto = makeLoop(['cc','mcp_cavemem','db','hooks'], 0xa6e3a1, 4, 0.55);
+const autoPulses = auto.pulses;
+// /goal/plan reasoning loop: Goal -> Plan -> Execute -> Review -> back
+const reason = makeLoop(['r_goal','r_plan','r_exec','r_review'], 0x74c7ec, 4, 0.55);
+const reasonPulses = reason.pulses;
+// graphify loop: Ingest -> Extract -> graphify-out -> Query -> back
+const graph = makeLoop(['g_ingest','g_extract','g_out','g_query'], 0x94e2d5, 4, 0.55);
+const graphPulses = graph.pulses;
+
+// traveling light pulses along every path
+const PULSE_PER_EDGE = 1;
+const pulseGeo = new THREE.SphereGeometry(0.9, 10, 10);
+const pulses = [];
+edges.forEach(e=>{
+  for(let k=0;k<PULSE_PER_EDGE;k++){
+    const mat = new THREE.MeshBasicMaterial({color:e.col, transparent:true, opacity:0.95});
+    const m = new THREE.Mesh(pulseGeo, mat);
+    // soft glow shell
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(2.2,10,10), new THREE.MeshBasicMaterial({color:e.col, transparent:true, opacity:0.25}));
+    m.add(glow);
+    scene.add(m);
+    pulses.push({mesh:m, e, p:Math.random(), speed:0.18/Math.max(e.len,1)+0.0015});
+  }
+});
+
+// interaction
+function pick(e){
+  mouse.x = (e.clientX/innerWidth)*2-1;
+  mouse.y = -(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hit = raycaster.intersectObjects(meshes,false);
+  if(hit.length){
+    const n = hit[0].object.userData;
+    const labelMap = {root:'ROOT',hub:'CORE HUB',ok:'OK',hook:'HOOK-BASED',unauth:'UNAUTH',fail:'FAIL'};
+    const colMap = {root:C.root,hub:C.hub,ok:C.ok,hook:C.hook,unauth:C.unauth,fail:C.fail};
+    document.getElementById('iname').textContent = n.label;
+    const tag = document.getElementById('itag');
+    tag.textContent = labelMap[n.status]||n.status;
+    tag.style.background = (colMap[n.status]||'#888')+'33';
+    tag.style.color = colMap[n.status]||'#888';
+    document.getElementById('idesc').textContent = n.desc;
+    document.getElementById('imeta').textContent = n.meta;
+    document.getElementById('info').style.display = 'block';
+    controls.autoRotate = false;
+  }
+}
+renderer.domElement.addEventListener('click', pick);
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); labelRenderer.setSize(innerWidth,innerHeight);
+});
+
+// ===== control bar wiring =====
+const camHome = camera.position.clone();
+function toggle(btn, group){
+  const on = btn.getAttribute('aria-pressed') !== 'true';
+  btn.setAttribute('aria-pressed', on);
+  group.visible = on;
+}
+document.getElementById('b-life').onclick = e=>toggle(e.currentTarget, lifecycleGroup);
+document.getElementById('b-agentic').onclick = e=>toggle(e.currentTarget, agentic.group);
+document.getElementById('b-auto').onclick = e=>toggle(e.currentTarget, auto.group);
+document.getElementById('b-reason').onclick = e=>toggle(e.currentTarget, reason.group);
+document.getElementById('b-graph').onclick = e=>toggle(e.currentTarget, graph.group);
+const bRot = document.getElementById('b-rotate');
+bRot.onclick = ()=>{
+  controls.autoRotate = !controls.autoRotate;
+  bRot.setAttribute('aria-pressed', controls.autoRotate);
+  bRot.textContent = (controls.autoRotate?'⏸':'▶') + ' Rotate';
+};
+document.getElementById('b-reset').onclick = ()=>{
+  camera.position.copy(camHome); controls.target.set(0,0,0);
+  controls.autoRotate = true; bRot.setAttribute('aria-pressed','true'); bRot.textContent='⏸ Rotate';
+  document.getElementById('info').style.display='none';
+};
+
+let t=0;
+function loop(){
+  requestAnimationFrame(loop);
+  t+=0.01;
+  meshes.forEach((m,i)=>{ m.children[0].scale.setScalar(1+0.12*Math.sin(t*2+i)); });
+  pulses.forEach(pu=>{
+    pu.p += pu.speed;
+    if(pu.p>1) pu.p -= 1;
+    pu.mesh.position.lerpVectors(pu.e.a, pu.e.b, pu.p);
+    // fade in/out at ends
+    const fade = Math.sin(pu.p*Math.PI);
+    pu.mesh.material.opacity = 0.35 + 0.6*fade;
+    pu.mesh.scale.setScalar(0.6 + 0.7*fade);
+  });
+  loopPulses.forEach(lp=>{
+    lp.p += 0.0022; if(lp.p>1) lp.p-=1;
+    loopCurve.getPointAt(lp.p, lp.mesh.position);
+    lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
+  });
+  [...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses].forEach(lp=>{
+    lp.p += 0.003; if(lp.p>1) lp.p-=1;
+    lp.curve.getPointAt(lp.p, lp.mesh.position);
+    lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
+  });
+  controls.update();
+  renderer.render(scene,camera);
+  labelRenderer.render(scene,camera);
+}
+loop();
+</script>
+</body>
+</html>
