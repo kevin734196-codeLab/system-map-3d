@@ -85,6 +85,7 @@
     <div class="row"><span class="dot" style="color:var(--c-role);background:var(--c-role)"></span> Goal/Plan loop (reasoning)</div>
     <div class="row"><span class="dot" style="color:var(--c-graph);background:var(--c-graph)"></span> Graphify loop (knowledge graph)</div>
     <div class="row"><span class="dot" style="color:var(--c-task);background:var(--c-task)"></span> Task path (async/background)</div>
+    <div class="row"><span class="dot" style="color:var(--c-grep);background:var(--c-grep)"></span> greploop (PR → 5/5)</div>
   </div>
   <div class="hint">Drag = orbit · scroll = zoom · click node = details</div>
 </div>
@@ -97,6 +98,7 @@
   <button class="btn" id="b-reason" aria-pressed="true"><span class="swatch" style="color:#74c7ec;background:#74c7ec"></span>Goal/Plan</button>
   <button class="btn" id="b-graph" aria-pressed="true"><span class="swatch" style="color:#94e2d5;background:#94e2d5"></span>Graphify</button>
   <button class="btn" id="b-task" aria-pressed="true"><span class="swatch" style="color:#b4befe;background:#b4befe"></span>Task</button>
+  <button class="btn" id="b-grep" aria-pressed="true"><span class="swatch" style="color:#f0c6c6;background:#f0c6c6"></span>greploop</button>
   <button class="btn" id="b-reset">⊙ Reset view</button>
 </div>
 
@@ -116,7 +118,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const C = {
-  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac', task:'#b4befe', tool:'#d3a8e0'
+  ok:'#a6e3a1', hook:'#f9e2af', unauth:'#fab387', fail:'#f38ba8', hub:'#89b4fa', root:'#cba6f7', role:'#74c7ec', graph:'#94e2d5', layer:'#eba0ac', task:'#b4befe', tool:'#d3a8e0', grep:'#f0c6c6'
 };
 
 // nodes: id, label, group, status, pos, size, desc, meta
@@ -182,6 +184,12 @@ const nodes = [
   {id:'t_spawn', label:'Spawn Agent', status:'task', size:3.2, desc:'Agent / cavecrew subagent spawned (investigator, builder, reviewer). Isolated worktree optional. Cold context, self-contained prompt.', meta:'Task · spawn'},
   {id:'t_run', label:'Run (bg)', status:'task', size:3.2, desc:'Background execution. Monitor / TaskOutput stream; run_in_background tasks notify on completion — no polling.', meta:'Task · run'},
   {id:'t_result', label:'Result', status:'task', size:3.2, desc:'TaskGet result merged back. Trust-but-verify: check actual changes, not just the agent summary. Returns to Hermes.', meta:'Task · merge'},
+
+  // greploop: iterate PR until Greptile 5/5 + zero unresolved comments
+  {id:'gl_review', label:'Trigger review', status:'grep', size:3, desc:'greploop. Trigger Greptile review on PR (GitHub) / MR (GitLab) / shelved CL (Perforce). Pulls confidence score + comments.', meta:'greploop · review'},
+  {id:'gl_fix', label:'Fix comments', status:'grep', size:3, desc:'Fix all actionable comments. Skip non-actionable/informational. Resolve threads.', meta:'greploop · fix'},
+  {id:'gl_push', label:'Push / reshelve', status:'grep', size:3, desc:'Push commits (or re-shelve CL). Re-trigger review on updated change.', meta:'greploop · push'},
+  {id:'gl_score', label:'Score 5/5?', status:'grep', size:3.2, desc:'Gate: Greptile 5/5 confidence + zero unresolved comments. If not met, loop back to fix. Exit when clean.', meta:'greploop · gate'},
 ];
 
 const links = [
@@ -200,6 +208,7 @@ const links = [
   ['cc','skills'],['skills','s_caveman'],['skills','s_review'],['skills','s_graphify'],['skills','s_packs'],
   ['cc','r_goal'],
   ['s_graphify','g_ingest'],
+  ['s_review','gl_review'],
 ];
 
 // ---- scene ----
@@ -265,6 +274,7 @@ function place(){
     r_goal:[-30,25,-50], r_plan:[-5,40,-65], r_exec:[20,25,-60], r_review:[-5,5,-72],
     g_ingest:[95,-20,30], g_extract:[115,-30,50], g_out:[105,-10,65], g_query:[90,-5,45],
     t_queue:[35,55,-30], t_spawn:[60,70,-25], t_run:[75,60,-45], t_result:[50,48,-55],
+    gl_review:[110,5,15], gl_fix:[130,-5,30], gl_push:[125,15,45], gl_score:[108,20,35],
   };
   nodes.forEach(n=>{
     const c = centers[n.id] || [(Math.random()-.5)*120,(Math.random()-.5)*80,(Math.random()-.5)*120];
@@ -347,6 +357,9 @@ const graphPulses = graph.pulses;
 // Task path: Queue -> Spawn -> Run -> Result -> back
 const task = makeLoop(['t_queue','t_spawn','t_run','t_result'], 0xb4befe, 4, 0.55);
 const taskPulses = task.pulses;
+// greploop: Trigger review -> Fix -> Push -> Score -> back until 5/5
+const greploop = makeLoop(['gl_review','gl_fix','gl_push','gl_score'], 0xf0c6c6, 4, 0.55);
+const greploopPulses = greploop.pulses;
 
 // traveling light pulses along every path
 const PULSE_PER_EDGE = 1;
@@ -372,7 +385,7 @@ function pick(e){
   const hit = raycaster.intersectObjects(meshes,false);
   if(hit.length){
     const n = hit[0].object.userData;
-    const labelMap = {root:'ROOT',hub:'CORE HUB',ok:'OK',hook:'HOOK-BASED',unauth:'UNAUTH',fail:'FAIL',layer:'LAYER',role:'REASONING',graph:'GRAPHIFY',task:'TASK',tool:'TOOL'};
+    const labelMap = {root:'ROOT',hub:'CORE HUB',ok:'OK',hook:'HOOK-BASED',unauth:'UNAUTH',fail:'FAIL',layer:'LAYER',role:'REASONING',graph:'GRAPHIFY',task:'TASK',tool:'TOOL',grep:'GREPLOOP'};
     const colMap = C;
     document.getElementById('iname').textContent = n.label;
     const tag = document.getElementById('itag');
@@ -406,6 +419,7 @@ document.getElementById('b-auto').onclick = e=>toggle(e.currentTarget, auto.grou
 document.getElementById('b-reason').onclick = e=>toggle(e.currentTarget, reason.group);
 document.getElementById('b-graph').onclick = e=>toggle(e.currentTarget, graph.group);
 document.getElementById('b-task').onclick = e=>toggle(e.currentTarget, task.group);
+document.getElementById('b-grep').onclick = e=>toggle(e.currentTarget, greploop.group);
 const bRot = document.getElementById('b-rotate');
 bRot.onclick = ()=>{
   controls.autoRotate = !controls.autoRotate;
@@ -432,7 +446,7 @@ function loop(){
     pu.mesh.material.opacity = 0.35 + 0.6*fade;
     pu.mesh.scale.setScalar(0.6 + 0.7*fade);
   });
-  [...lifecyclePulses, ...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses, ...taskPulses].forEach(lp=>{
+  [...lifecyclePulses, ...agenticPulses, ...autoPulses, ...reasonPulses, ...graphPulses, ...taskPulses, ...greploopPulses].forEach(lp=>{
     lp.p += 0.003; if(lp.p>1) lp.p-=1;
     lp.curve.getPointAt(lp.p, lp.mesh.position);
     lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
