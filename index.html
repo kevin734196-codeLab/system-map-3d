@@ -218,28 +218,9 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.07;
 controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
 
-scene.add(new THREE.AmbientLight(0xffffff,0.5));
-const pl = new THREE.PointLight(0xffffff,1.1); pl.position.set(60,80,100); scene.add(pl);
-const pl2 = new THREE.PointLight(0x89b4fa,0.8); pl2.position.set(-80,-40,-60); scene.add(pl2);
-// colored rim lights — orbiting, tint the scene
-const tint1 = new THREE.PointLight(0xcba6f7, 0.9, 400); scene.add(tint1); // mauve
-const tint2 = new THREE.PointLight(0x94e2d5, 0.8, 400); scene.add(tint2); // teal
-const tint3 = new THREE.PointLight(0xf5c2e7, 0.7, 400); scene.add(tint3); // pink
-const tint4 = new THREE.PointLight(0xeba0ac, 0.7, 400); scene.add(tint4); // maroon
-
-// floating "little lights" — drifting motes / fireflies
-const moteCount = 220;
-const mg = new THREE.BufferGeometry();
-const mv = [], moteCols = [], palette = [0xa6e3a1,0xf9e2af,0x89b4fa,0xcba6f7,0x94e2d5,0xf5c2e7,0xfab387,0xb4befe];
-for(let i=0;i<moteCount;i++){
-  mv.push((Math.random()-.5)*260,(Math.random()-.5)*200,(Math.random()-.5)*260);
-  const c = new THREE.Color(palette[i%palette.length]);
-  moteCols.push(c.r,c.g,c.b);
-}
-mg.setAttribute('position', new THREE.Float32BufferAttribute(mv,3));
-mg.setAttribute('color', new THREE.Float32BufferAttribute(moteCols,3));
-const motes = new THREE.Points(mg, new THREE.PointsMaterial({size:1.8, vertexColors:true, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false}));
-scene.add(motes);
+// dim base lighting — light comes from the system itself (emissive nodes + bloom)
+scene.add(new THREE.AmbientLight(0xffffff,0.35));
+const pl = new THREE.PointLight(0xffffff,0.6); pl.position.set(60,80,100); scene.add(pl);
 
 // starfield
 const sg = new THREE.BufferGeometry();
@@ -431,14 +412,6 @@ function loop(){
     lp.curve.getPointAt(lp.p, lp.mesh.position);
     lp.mesh.scale.setScalar(0.8+0.3*Math.sin(t*3+lp.p*6));
   });
-  // orbiting colored rim lights
-  tint1.position.set(Math.cos(t*0.4)*150, 60, Math.sin(t*0.4)*150);
-  tint2.position.set(Math.cos(t*0.4+2.1)*150, -50, Math.sin(t*0.4+2.1)*150);
-  tint3.position.set(Math.cos(t*0.3+4.2)*130, 30, Math.sin(t*0.3+4.2)*130);
-  tint4.position.set(Math.cos(-t*0.35+1)*140, -20, Math.sin(-t*0.35+1)*140);
-  // drifting motes
-  motes.rotation.y = t*0.03;
-  motes.material.opacity = 0.6 + 0.25*Math.sin(t*1.5);
   controls.update();
   composer.render();
   labelRenderer.render(scene,camera);
